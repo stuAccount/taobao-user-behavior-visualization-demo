@@ -45,3 +45,9 @@ docker-compose.override.yml
 # ── 临时文件 ──
 *.tmp
 *.log
+
+# ── 项目引导文档（不推送）──
+AGENTS.md
+
+# ── 原始数据文件 ──
+UserBehavior.csv
