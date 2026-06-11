@@ -108,7 +108,8 @@ def load_cleaned_data(columns: list[str] | None = None) -> pd.DataFrame:
     """加载清洗后数据。"""
     cleaned_path = get_cleaned_data_path()
     if cleaned_path.is_dir():
-        return pd.concat(iter_cleaned_data_chunks(columns=columns), ignore_index=True)
+        frames = list(iter_cleaned_data_chunks(columns=columns))
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=columns)
     if cleaned_path.suffix == ".parquet":
         return pd.read_parquet(cleaned_path, columns=columns)
     parse_dates = ["datetime"] if columns is None or "datetime" in columns else None

@@ -31,9 +31,9 @@ if [ -f "$RAW_FILE" ]; then
 fi
 
 echo "开始下载 UserBehavior 数据集（约 3.67GB）。"
+"$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
 
 if command -v kaggle >/dev/null 2>&1 || [ -n "${KAGGLE_USERNAME:-}" ] || [ -f "$HOME/.kaggle/kaggle.json" ]; then
-    "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
     "$PYTHON_BIN" -m pip install -q kaggle
     if command -v kaggle >/dev/null 2>&1; then
         KAGGLE_CMD="kaggle"
@@ -42,15 +42,31 @@ if command -v kaggle >/dev/null 2>&1 || [ -n "${KAGGLE_USERNAME:-}" ] || [ -f "$
     fi
     "$KAGGLE_CMD" datasets download -d gogokerry/taobao-user-behavior -p "$DATA_DIR" --unzip
 else
-    if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
-        echo "缺少 curl 或 unzip，无法使用备用下载方式。"
+    echo "未检测到 Kaggle legacy 凭据，尝试使用 kagglehub 下载公开数据集。"
+    "$PYTHON_BIN" -m pip install -q kagglehub
+    if ! DATA_DIR="$DATA_DIR" "$PYTHON_BIN" - <<'PY'
+from pathlib import Path
+import os
+import shutil
+
+import kagglehub
+
+data_dir = Path(os.environ["DATA_DIR"])
+dataset_dir = Path(kagglehub.dataset_download("gogokerry/taobao-user-behavior"))
+csv_files = list(dataset_dir.rglob("UserBehavior.csv"))
+if not csv_files:
+    csv_files = list(dataset_dir.rglob("*UserBehavior*.csv"))
+if not csv_files:
+    raise FileNotFoundError(f"未在 kagglehub 下载目录中找到 UserBehavior.csv：{dataset_dir}")
+shutil.copy2(csv_files[0], data_dir / "UserBehavior.csv")
+PY
+    then
+        echo "kagglehub 下载失败。请配置 Kaggle API 凭据后重试："
+        echo "  export KAGGLE_USERNAME=YOUR_USERNAME"
+        echo "  export KAGGLE_KEY=YOUR_API_KEY"
+        echo "或创建 ~/.kaggle/kaggle.json 并设置 chmod 600。"
         exit 1
     fi
-    echo "未检测到 Kaggle 凭据，尝试 Kaggle 公共下载接口。"
-    curl -L -o "$DATA_DIR/taobao-user-behavior.zip" \
-        "https://www.kaggle.com/api/v1/datasets/download/gogokerry/taobao-user-behavior"
-    unzip -o "$DATA_DIR/taobao-user-behavior.zip" -d "$DATA_DIR"
-    rm -f "$DATA_DIR/taobao-user-behavior.zip"
 fi
 
 if [ ! -f "$RAW_FILE" ]; then
