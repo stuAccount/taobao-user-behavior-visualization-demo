@@ -1,8 +1,57 @@
-"""漏斗分析页面骨架。"""
+"""行为漏斗分析交互页面。"""
 
 from __future__ import annotations
 
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
+from analysis import config
+from analysis.utils import load_json, read_table
+
+
+@st.cache_data(show_spinner=False)
+def load_funnel_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """加载漏斗汇总与日趋势。"""
+    summary = load_json(config.FUNNEL_SUMMARY_PATH, default={})
+    funnel_df = pd.DataFrame(summary.get("funnel", []))
+    daily_df = read_table(config.FUNNEL_DAILY_PATH) if config.FUNNEL_DAILY_PATH.exists() else pd.DataFrame()
+    return funnel_df, daily_df
+
+
 st.title("行为漏斗分析")
-st.info("漏斗分析结果生成后，此页面将展示转化率、趋势图和桑基图。")
+funnel_df, daily_df = load_funnel_data()
+
+if funnel_df.empty:
+    st.warning("尚未生成漏斗结果，请先运行 `python -m analysis.funnel_analysis`。")
+    st.stop()
+
+st.plotly_chart(
+    px.funnel(funnel_df, x="uv", y="label", title="用户行为漏斗 UV"),
+    width="stretch",
+)
+
+labels = funnel_df["label"].tolist()
+values = [int(min(funnel_df.iloc[index]["uv"], funnel_df.iloc[index + 1]["uv"])) for index in range(len(funnel_df) - 1)]
+sankey = go.Figure(
+    data=[
+        go.Sankey(
+            node={"label": labels},
+            link={"source": list(range(len(values))), "target": list(range(1, len(values) + 1)), "value": values},
+        )
+    ]
+)
+sankey.update_layout(title_text="用户行为转化桑基图")
+st.plotly_chart(sankey, width="stretch")
+
+if not daily_df.empty:
+    daily_df["date"] = daily_df["date"].astype(str)
+    selected_dates = st.multiselect("选择日期", daily_df["date"].tolist(), default=daily_df["date"].tolist())
+    filtered_daily = daily_df[daily_df["date"].isin(selected_dates)] if selected_dates else daily_df
+    st.plotly_chart(
+        px.line(filtered_daily, x="date", y="buy_conversion_rate", markers=True, title="日维度购买转化率趋势"),
+        width="stretch",
+    )
+
+st.dataframe(funnel_df, width="stretch")
