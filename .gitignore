@@ -1,0 +1,47 @@
+# ── 数据文件（太大，不进 Git）──
+data/*
+!data/.gitkeep
+
+# ── 输出文件（图片、模型等）──
+output/*
+!output/.gitkeep
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── 虚拟环境 ──
+.venv/
+venv/
+env/
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Jupyter ──
+.ipynb_checkpoints/
+
+# ── macOS ──
+.DS_Store
+._*
+
+# ── 环境变量 ──
+.env
+
+# ── Docker ──
+docker-compose.override.yml
+
+# ── 临时文件 ──
+*.tmp
+*.log
