@@ -412,3 +412,204 @@ FONT_FAMILY = "PingFang SC"    # macOS; Docker 中改为 "WenQuanYi Zen Hei"
 - 课程汇报 PPT 和讲稿：`../课程汇报/` 目录
 - Kaggle 数据集：https://www.kaggle.com/datasets/gogokerry/taobao-user-behavior
 - 天池数据集：https://tianchi.aliyun.com/dataset/649
+
+---
+
+## 15. 按需容器工作流（重要）
+
+### 15.1 场景说明
+
+服务器是**随用随销的容器**，每次启动都是全新环境，没有持久化存储。因此需要将工作流分为两个独立阶段，避免每次都重新下载 3.67GB 数据和跑分析。
+
+### 15.2 两阶段工作流
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  阶段 A：生成分析结果（只在首次或修改代码后执行一次）        │
+│                                                         │
+│  1. SSH 到服务器                                         │
+│  2. git clone 项目代码                                   │
+│  3. ./scripts/setup_and_analyze.sh                       │
+│     → 自动安装依赖                                       │
+│     → 下载数据集（Kaggle API）                            │
+│     → 运行数据清洗                                       │
+│     → 运行全部分析模块                                    │
+│     → 生成所有可视化图片                                   │
+│  4. 将 output/ 和 data/cleaned/ 打包下载到本地             │
+│     → scp 或 tar 打包                                    │
+│  5. 销毁服务器                                           │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│  阶段 B：演示展示（线下汇报时使用）                        │
+│                                                         │
+│  方案 B1：本地演示（推荐）                                 │
+│    → 用本地已有的 output/ 图片贴进 PPT                     │
+│    → 或用本地 Python 环境启动 Streamlit 仪表盘             │
+│                                                         │
+│  方案 B2：服务器演示（需要在线交互时）                      │
+│    → 启动新服务器                                        │
+│    → git clone + 上传之前打包的数据和结果                   │
+│    → ./scripts/demo.sh                                   │
+│      → 安装依赖（快速，不需要下载数据）                     │
+│      → 直接用已有的 cleaned 数据启动 Streamlit             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 15.3 需要实现的脚本
+
+#### `scripts/setup_and_analyze.sh`（阶段 A：完整流程）
+
+```bash
+#!/bin/bash
+# 阶段 A：在按需容器上执行一次完整的数据下载 + 分析流程
+# 适用于：首次运行 / 修改分析代码后重新生成结果
+set -e
+
+echo "========== [1/5] 安装 Python 依赖 =========="
+pip install -r requirements.txt
+
+echo "========== [2/5] 下载数据集 =========="
+# 使用 Kaggle API 下载（需要 KAGGLE_USERNAME 和 KAGGLE_KEY 环境变量）
+# 如果已存在则跳过
+if [ ! -f data/UserBehavior.csv ]; then
+    mkdir -p data
+    pip install kaggle
+    kaggle datasets download -d gogokerry/taobao-user-behavior -p data/ --unzip
+    # 如果下载的是 zip，解压后移到正确位置
+    if [ -f data/taobao-user-behavior.zip ]; then
+        unzip -o data/taobao-user-behavior.zip -d data/
+        rm data/taobao-user-behavior.zip
+    fi
+    echo "✅ 数据下载完成"
+else
+    echo "⏭️  数据文件已存在，跳过下载"
+fi
+
+echo "========== [3/5] 数据清洗 =========="
+python -m analysis.data_cleaning
+
+echo "========== [4/5] 运行分析模块 =========="
+python -m analysis.rfm_analysis
+python -m analysis.funnel_analysis
+python -m analysis.clustering
+# python -m analysis.association_rules  # 可选，取消注释启用
+
+echo "========== [5/5] 打包结果 =========="
+tar -czf results_bundle.tar.gz output/ data/cleaned/
+echo "✅ 全部完成！结果已打包为 results_bundle.tar.gz"
+echo "   请用以下命令下载到本地："
+echo "   scp <server>:<path>/results_bundle.tar.gz ./"
+```
+
+#### `scripts/demo.sh`（阶段 B：仅启动演示）
+
+```bash
+#!/bin/bash
+# 阶段 B：在已有分析结果的前提下，快速启动 Streamlit 演示仪表盘
+# 适用于：线下汇报现场演示 / 查看已有结果
+set -e
+
+echo "========== 安装依赖 =========="
+pip install -r requirements.txt
+
+# 检查是否有清洗后的数据
+if [ ! -d data/cleaned ]; then
+    echo "❌ 未找到 data/cleaned/ 目录"
+    echo "   请先运行 scripts/setup_and_analyze.sh 或上传之前打包的结果"
+    echo "   解压命令：tar -xzf results_bundle.tar.gz"
+    exit 1
+fi
+
+echo "========== 启动 Streamlit 仪表盘 =========="
+streamlit run dashboard/app.py \
+    --server.port 8501 \
+    --server.address 0.0.0.0 \
+    --server.headless true
+```
+
+#### `scripts/download_data.sh`（独立的数据下载脚本）
+
+```bash
+#!/bin/bash
+# 独立的数据下载脚本，可单独执行
+# 支持 Kaggle API 和直接 URL 两种方式
+set -e
+
+mkdir -p data
+
+if [ -f data/UserBehavior.csv ]; then
+    echo "⏭️  数据文件已存在（$(du -h data/UserBehavior.csv | cut -f1)），跳过下载"
+    exit 0
+fi
+
+echo "开始下载 UserBehavior 数据集（约 3.67GB）..."
+
+# 方式 1：Kaggle API（推荐，需要先配置 kaggle.json）
+if command -v kaggle &> /dev/null || [ -f ~/.kaggle/kaggle.json ]; then
+    pip install -q kaggle
+    kaggle datasets download -d gogokerry/taobao-user-behavior -p data/ --unzip
+# 方式 2：直接 curl（备用）
+else
+    echo "未检测到 Kaggle CLI，尝试直接下载..."
+    curl -L -o data/taobao-user-behavior.zip \
+        "https://www.kaggle.com/api/v1/datasets/download/gogokerry/taobao-user-behavior"
+    unzip -o data/taobao-user-behavior.zip -d data/
+    rm -f data/taobao-user-behavior.zip
+fi
+
+# 验证文件
+if [ -f data/UserBehavior.csv ]; then
+    LINES=$(wc -l < data/UserBehavior.csv)
+    SIZE=$(du -h data/UserBehavior.csv | cut -f1)
+    echo "✅ 下载完成：data/UserBehavior.csv（$LINES 行，$SIZE）"
+else
+    echo "❌ 下载后未找到 UserBehavior.csv，请检查 data/ 目录内容"
+    ls -la data/
+    exit 1
+fi
+```
+
+### 15.4 结果同步方式
+
+在服务器上生成结果后，需要下载到本地保存：
+
+```bash
+# 在服务器上打包
+tar -czf results_bundle.tar.gz output/ data/cleaned/
+
+# 从服务器下载到本地
+scp user@server:/path/to/results_bundle.tar.gz ./
+
+# 本地解压
+tar -xzf results_bundle.tar.gz
+```
+
+### 15.5 目录结构更新
+
+```
+电商用户行为分析/
+├── ...（已有文件）
+├── scripts/                          ← 运维脚本
+│   ├── setup_and_analyze.sh          ← 阶段 A：完整流程（下载+清洗+分析+打包）
+│   ├── demo.sh                       ← 阶段 B：仅启动演示仪表盘
+│   └── download_data.sh              ← 独立数据下载脚本
+└── results_bundle.tar.gz             ← 打包的分析结果（可选，从服务器下载）
+```
+
+### 15.6 Kaggle API 配置
+
+在服务器上需要先配置 Kaggle API 才能下载数据：
+
+```bash
+# 1. 创建 kaggle 配置目录
+mkdir -p ~/.kaggle
+
+# 2. 写入 API 密钥（从 https://www.kaggle.com/settings 获取）
+echo '{"username":"YOUR_USERNAME","key":"YOUR_API_KEY"}' > ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+
+# 3. 或者通过环境变量传入
+export KAGGLE_USERNAME=YOUR_USERNAME
+export KAGGLE_KEY=YOUR_API_KEY
+```
