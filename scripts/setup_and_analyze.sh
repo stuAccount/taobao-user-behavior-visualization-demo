@@ -7,7 +7,15 @@ cd "$PROJECT_ROOT"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
-RUN_APRIORI="${RUN_APRIORI:-1}"
+RUN_APRIORI="${RUN_APRIORI:-0}"
+
+install_ubuntu_packages_if_possible() {
+    if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+        echo "检测到 Ubuntu/Debian root 环境，安装系统依赖。"
+        apt-get update
+        apt-get install -y --no-install-recommends python3-venv curl unzip
+    fi
+}
 
 echo "========== [1/6] 检查 Python 环境 =========="
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
@@ -15,16 +23,25 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
     exit 1
 fi
 
-PYTHON_VERSION="$($PYTHON_BIN - <<'PY'
+PYTHON_CHECK="$($PYTHON_BIN - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
 PY
-)"
-echo "当前 Python 版本：$PYTHON_VERSION"
+)" || {
+    echo "当前 Python 版本低于 3.10：$PYTHON_CHECK"
+    exit 1
+}
+echo "当前 Python 版本：$PYTHON_CHECK"
+
+install_ubuntu_packages_if_possible
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "创建虚拟环境：$VENV_DIR"
-    "$PYTHON_BIN" -m venv "$VENV_DIR"
+    if ! "$PYTHON_BIN" -m venv "$VENV_DIR"; then
+        install_ubuntu_packages_if_possible
+        "$PYTHON_BIN" -m venv "$VENV_DIR"
+    fi
 fi
 
 PYTHON="$PROJECT_ROOT/$VENV_DIR/bin/python"

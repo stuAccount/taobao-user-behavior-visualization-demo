@@ -21,13 +21,24 @@ FUNNEL_LABELS = {
 def build_funnel_summary(df: pd.DataFrame) -> pd.DataFrame:
     """计算行为漏斗核心指标。"""
     rows = []
-    previous_users: set[int] | None = None
+    first_times = (
+        df.groupby(["user_id", "behavior"])["timestamp"]
+        .min()
+        .unstack()
+        .reindex(columns=FUNNEL_STEPS)
+    )
+    previous_times: pd.Series | None = None
     previous_uv: int | None = None
     for behavior in FUNNEL_STEPS:
         behavior_df = df[df["behavior"].astype(str) == behavior]
-        behavior_users = set(behavior_df["user_id"].dropna().astype(int).unique())
-        funnel_users = behavior_users if previous_users is None else previous_users & behavior_users
-        uv = len(funnel_users)
+        behavior_times = first_times[behavior].dropna()
+        if previous_times is None:
+            funnel_times = behavior_times
+        else:
+            aligned = behavior_times.reindex(previous_times.index).dropna()
+            previous_aligned = previous_times.reindex(aligned.index)
+            funnel_times = aligned[aligned >= previous_aligned]
+        uv = int(len(funnel_times))
         independent_uv = int(behavior_df["user_id"].nunique())
         actions = int(len(behavior_df))
         conversion_rate = uv / previous_uv if previous_uv else 1.0
@@ -43,7 +54,7 @@ def build_funnel_summary(df: pd.DataFrame) -> pd.DataFrame:
                 "loss_rate": round(loss_rate, 4),
             }
         )
-        previous_users = funnel_users
+        previous_times = funnel_times
         previous_uv = uv
     return pd.DataFrame(rows)
 
@@ -174,7 +185,7 @@ def run_funnel_analysis() -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]
     ensure_directories()
     logger = get_logger("funnel_analysis")
     with log_step(logger, "加载清洗后数据"):
-        df = load_cleaned_data(columns=["user_id", "behavior", "date", "hour"])
+        df = load_cleaned_data(columns=["user_id", "behavior", "timestamp", "date", "hour"])
     with log_step(logger, "计算漏斗指标"):
         funnel_df = build_funnel_summary(df)
         daily_df = build_daily_conversion(df)

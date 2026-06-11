@@ -34,7 +34,7 @@ def load_or_build_rfm() -> pd.DataFrame:
 def prepare_features(rfm: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
     """准备聚类特征。"""
     feature_columns = ["recency", "frequency", "monetary"]
-    feature_df = rfm[["user_id", *feature_columns]].dropna().copy()
+    feature_df = rfm[["user_id", *feature_columns]].dropna().reset_index(drop=True)
     if feature_df.empty:
         return feature_df, np.empty((0, len(feature_columns)))
     scaler = StandardScaler()
@@ -163,15 +163,20 @@ def plot_pca_scatter(clustered_df: pd.DataFrame, features: np.ndarray) -> None:
     if clustered_df.empty:
         return
     fig, ax = create_figure()
-    if len(clustered_df) < 2:
+    plot_df = clustered_df
+    plot_features = features
+    if len(clustered_df) > config.PLOT_SAMPLE_SIZE:
+        plot_df = clustered_df.sample(config.PLOT_SAMPLE_SIZE, random_state=config.RANDOM_STATE)
+        plot_features = features[plot_df.index.to_numpy()]
+    if len(plot_df) < 2:
         ax.scatter([0], [0], color=config.COLORS["primary"], s=80)
     else:
         pca = PCA(n_components=2, random_state=config.RANDOM_STATE)
-        components = pca.fit_transform(features)
+        components = pca.fit_transform(plot_features)
         scatter = ax.scatter(
             components[:, 0],
             components[:, 1],
-            c=clustered_df["cluster"],
+            c=plot_df["cluster"],
             cmap="viridis",
             s=45,
             alpha=0.8,

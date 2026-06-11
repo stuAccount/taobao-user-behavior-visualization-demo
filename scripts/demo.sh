@@ -8,8 +8,26 @@ cd "$PROJECT_ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
 
+if ! "$PYTHON_BIN" - <<'PY'
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+then
+    echo "Python 版本需为 3.10+。"
+    exit 1
+fi
+
 if [ ! -d "$VENV_DIR" ]; then
-    "$PYTHON_BIN" -m venv "$VENV_DIR"
+    if ! "$PYTHON_BIN" -m venv "$VENV_DIR"; then
+        if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+            apt-get update
+            apt-get install -y --no-install-recommends python3-venv
+            "$PYTHON_BIN" -m venv "$VENV_DIR"
+        else
+            echo "创建虚拟环境失败，请安装 python3-venv 后重试。"
+            exit 1
+        fi
+    fi
 fi
 
 PYTHON="$PROJECT_ROOT/$VENV_DIR/bin/python"

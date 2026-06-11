@@ -74,6 +74,9 @@ def save_dataframe(df: pd.DataFrame, path: Path, logger: logging.Logger | None =
 
 def read_table(path: Path, **kwargs: Any) -> pd.DataFrame:
     """根据扩展名读取表格数据。"""
+    if path.is_dir():
+        frames = [read_table(child, **kwargs) for child in sorted(path.iterdir()) if child.suffix in {".parquet", ".csv"}]
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if path.suffix == ".parquet":
         return pd.read_parquet(path, **kwargs)
     if path.suffix == ".csv":
@@ -92,7 +95,7 @@ def find_first_existing_path(candidates: list[Path]) -> Path | None:
 def get_cleaned_data_path() -> Path:
     """获取清洗后数据文件路径。"""
     cleaned_path = find_first_existing_path(
-        [config.CLEANED_PARQUET_PATH, config.CLEANED_CSV_PATH]
+        [config.CLEANED_PARQUET_PATH, config.CLEANED_CSV_PATH, config.CLEANED_CHUNK_DIR]
     )
     if cleaned_path is None:
         raise FileNotFoundError(
@@ -104,9 +107,30 @@ def get_cleaned_data_path() -> Path:
 def load_cleaned_data(columns: list[str] | None = None) -> pd.DataFrame:
     """加载清洗后数据。"""
     cleaned_path = get_cleaned_data_path()
+    if cleaned_path.is_dir():
+        return pd.concat(iter_cleaned_data_chunks(columns=columns), ignore_index=True)
     if cleaned_path.suffix == ".parquet":
         return pd.read_parquet(cleaned_path, columns=columns)
-    return pd.read_csv(cleaned_path, usecols=columns, parse_dates=["datetime"])
+    parse_dates = ["datetime"] if columns is None or "datetime" in columns else None
+    return pd.read_csv(cleaned_path, usecols=columns, parse_dates=parse_dates)
+
+
+def iter_cleaned_data_chunks(columns: list[str] | None = None):
+    """按清洗后分块文件迭代读取数据。"""
+    cleaned_path = get_cleaned_data_path()
+    if cleaned_path.is_file():
+        yield load_cleaned_data(columns=columns)
+        return
+
+    chunk_paths = sorted(
+        path for path in cleaned_path.iterdir() if path.suffix in {".parquet", ".csv"}
+    )
+    for chunk_path in chunk_paths:
+        if chunk_path.suffix == ".parquet":
+            yield pd.read_parquet(chunk_path, columns=columns)
+        else:
+            parse_dates = ["datetime"] if columns is None or "datetime" in columns else None
+            yield pd.read_csv(chunk_path, usecols=columns, parse_dates=parse_dates)
 
 
 def validate_raw_data_file() -> None:

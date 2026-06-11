@@ -11,7 +11,7 @@ from mlxtend.frequent_patterns import apriori, association_rules
 from mlxtend.preprocessing import TransactionEncoder
 
 from analysis import config
-from analysis.utils import ensure_directories, get_logger, load_cleaned_data, log_step, save_json
+from analysis.utils import ensure_directories, get_logger, iter_cleaned_data_chunks, log_step, save_json
 from analysis.visualization import create_figure, save_figure
 
 
@@ -34,6 +34,40 @@ def build_transactions(
         .tolist()
     )
     return [transaction for transaction in transactions if len(transaction) >= 2]
+
+
+def _sample_user(user_id: int, sample_fraction: float) -> bool:
+    """用稳定哈希决定用户是否进入 Apriori 抽样。"""
+    if sample_fraction >= 1:
+        return True
+    bucket = pd.util.hash_pandas_object(pd.Index([user_id]), index=False).iloc[0] % 10_000
+    return bucket < int(sample_fraction * 10_000)
+
+
+def build_transactions_from_cleaned_data(
+    sample_fraction: float = config.APRIORI_SAMPLE_FRACTION,
+    small_user_limit: int = 10_000,
+) -> list[list[str]]:
+    """流式读取清洗数据并构建购买事务，避免 Apriori 前加载全量明细。"""
+    sampled_transactions: dict[int, set[str]] = {}
+    small_transactions: dict[int, set[str]] | None = {}
+
+    for chunk in iter_cleaned_data_chunks(columns=["user_id", "category_id", "behavior"]):
+        buy_chunk = chunk[chunk["behavior"].astype(str) == "buy"]
+        if buy_chunk.empty:
+            continue
+        for user_id, category_id in buy_chunk[["user_id", "category_id"]].itertuples(index=False):
+            user_id = int(user_id)
+            category = str(category_id)
+            if small_transactions is not None:
+                small_transactions.setdefault(user_id, set()).add(category)
+                if len(small_transactions) > small_user_limit:
+                    small_transactions = None
+            if _sample_user(user_id, sample_fraction):
+                sampled_transactions.setdefault(user_id, set()).add(category)
+
+    source = small_transactions if small_transactions is not None else sampled_transactions
+    return [sorted(categories) for categories in source.values() if len(categories) >= 2]
 
 
 def mine_association_rules(
@@ -164,10 +198,8 @@ def run_association_rules() -> tuple[pd.DataFrame, dict[str, object]]:
     """执行 Apriori 关联规则分析。"""
     ensure_directories()
     logger = get_logger("association_rules")
-    with log_step(logger, "加载清洗后数据"):
-        df = load_cleaned_data(columns=["user_id", "category_id", "behavior"])
     with log_step(logger, "构建购买事务"):
-        transactions = build_transactions(df)
+        transactions = build_transactions_from_cleaned_data()
     with log_step(logger, "挖掘关联规则"):
         rules_df = mine_association_rules(transactions)
         used_fallback = False

@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+env
+__pycache__
+*.pyc
+.DS_Store
+data
+output
+results_bundle.tar.gz
+*.log
+*.tmp
