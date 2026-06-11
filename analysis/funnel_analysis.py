@@ -21,24 +21,25 @@ FUNNEL_LABELS = {
 def build_funnel_summary(df: pd.DataFrame) -> pd.DataFrame:
     """计算行为漏斗核心指标。"""
     rows = []
-    first_times = (
-        df.groupby(["user_id", "behavior"])["timestamp"]
-        .min()
-        .unstack()
-        .reindex(columns=FUNNEL_STEPS)
-    )
-    previous_times: pd.Series | None = None
+    previous_stage = pd.Series(dtype="int64")
     previous_uv: int | None = None
     for behavior in FUNNEL_STEPS:
         behavior_df = df[df["behavior"].astype(str) == behavior]
-        behavior_times = first_times[behavior].dropna()
-        if previous_times is None:
-            funnel_times = behavior_times
+        behavior_times = behavior_df.groupby("user_id")["timestamp"].min()
+        if behavior == FUNNEL_STEPS[0]:
+            current_stage = behavior_times
         else:
-            aligned = behavior_times.reindex(previous_times.index).dropna()
-            previous_aligned = previous_times.reindex(aligned.index)
-            funnel_times = aligned[aligned >= previous_aligned]
-        uv = int(len(funnel_times))
+            current_events = behavior_df[["user_id", "timestamp"]].merge(
+                previous_stage.rename("previous_timestamp"),
+                left_on="user_id",
+                right_index=True,
+                how="inner",
+            )
+            current_events = current_events[
+                current_events["timestamp"] >= current_events["previous_timestamp"]
+            ]
+            current_stage = current_events.groupby("user_id")["timestamp"].min()
+        uv = int(len(current_stage))
         independent_uv = int(behavior_df["user_id"].nunique())
         actions = int(len(behavior_df))
         conversion_rate = uv / previous_uv if previous_uv else 1.0
@@ -54,7 +55,7 @@ def build_funnel_summary(df: pd.DataFrame) -> pd.DataFrame:
                 "loss_rate": round(loss_rate, 4),
             }
         )
-        previous_times = funnel_times
+        previous_stage = current_stage
         previous_uv = uv
     return pd.DataFrame(rows)
 
