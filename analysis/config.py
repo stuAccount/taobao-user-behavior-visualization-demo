@@ -17,7 +17,6 @@ SUMMARY_DIR = OUTPUT_DIR / "summary"
 RFM_OUTPUT_DIR = OUTPUT_DIR / "rfm"
 FUNNEL_OUTPUT_DIR = OUTPUT_DIR / "funnel"
 CLUSTERING_OUTPUT_DIR = OUTPUT_DIR / "clustering"
-ASSOCIATION_OUTPUT_DIR = OUTPUT_DIR / "association"
 
 CLEANED_DATA_FILE_STEM = "user_behavior_cleaned"
 CLEANED_CHUNK_DIR = CLEANED_DATA_DIR / "chunks"
@@ -32,8 +31,6 @@ FUNNEL_SUMMARY_PATH = SUMMARY_DIR / "funnel_summary.json"
 FUNNEL_DAILY_PATH = SUMMARY_DIR / "funnel_daily.parquet"
 CLUSTERING_RESULT_PATH = SUMMARY_DIR / "clustering_result.parquet"
 CLUSTERING_SUMMARY_PATH = SUMMARY_DIR / "clustering_summary.json"
-ASSOCIATION_RULES_PATH = SUMMARY_DIR / "association_rules.csv"
-ASSOCIATION_SUMMARY_PATH = SUMMARY_DIR / "association_summary.json"
 
 # 数据
 COLUMNS = ["user_id", "item_id", "category_id", "behavior", "timestamp"]
@@ -56,13 +53,6 @@ RFM_MONETARY_MODE = "category_count"
 KMEANS_K_RANGE = (2, 8)
 KMEANS_OPTIMAL_K = 5
 PLOT_SAMPLE_SIZE = 50_000
-
-# Apriori
-APRIORI_SAMPLE_FRACTION = 0.05
-APRIORI_MIN_SUPPORT = 0.01
-APRIORI_MIN_CONFIDENCE = 0.1
-APRIORI_MIN_LIFT = 2.0
-APRIORI_MAX_RULES = 30
 
 # 可视化
 FIGURE_DPI = 300
@@ -98,5 +88,4 @@ OUTPUT_DIRECTORIES = [
     RFM_OUTPUT_DIR,
     FUNNEL_OUTPUT_DIR,
     CLUSTERING_OUTPUT_DIR,
-    ASSOCIATION_OUTPUT_DIR,
 ]

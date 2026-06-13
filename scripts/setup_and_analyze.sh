@@ -7,7 +7,6 @@ cd "$PROJECT_ROOT"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
-RUN_APRIORI="${RUN_APRIORI:-0}"
 CLEANING_THREADS="${CLEANING_THREADS:-64}"
 export CLEANING_ENGINE="${CLEANING_ENGINE:-polars}"
 export POLARS_MAX_THREADS="${POLARS_MAX_THREADS:-$CLEANING_THREADS}"
@@ -71,15 +70,6 @@ echo "========== [5/6] 运行分析模块 =========="
 "$PYTHON" -m analysis.rfm_analysis
 "$PYTHON" -m analysis.funnel_analysis
 "$PYTHON" -m analysis.clustering
-
-if [ "$RUN_APRIORI" = "1" ]; then
-    echo "========== [5/6] 运行 Apriori 关联规则（可选） =========="
-    if ! "$PYTHON" -m analysis.association_rules; then
-        echo "Apriori 模块执行失败，核心分析结果已生成；可调低阈值或关闭 RUN_APRIORI 后重试。"
-    fi
-else
-    echo "跳过 Apriori：如需启用，请执行 RUN_APRIORI=1 ./run.sh"
-fi
 
 echo "========== [6/6] 打包结果 =========="
 tar -czf results_bundle.tar.gz output/ data/cleaned/
