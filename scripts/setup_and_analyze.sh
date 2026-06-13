@@ -16,7 +16,13 @@ install_ubuntu_packages_if_possible() {
     if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
         echo "检测到 Ubuntu/Debian root 环境，安装系统依赖。"
         apt-get update
-        apt-get install -y --no-install-recommends python3-venv curl unzip
+        apt-get install -y --no-install-recommends \
+            python3-venv \
+            curl \
+            unzip \
+            fontconfig \
+            fonts-wqy-zenhei
+        fc-cache -fv >/dev/null 2>&1 || true
     fi
 }
 

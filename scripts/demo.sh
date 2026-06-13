@@ -21,7 +21,8 @@ if [ ! -d "$VENV_DIR" ]; then
     if ! "$PYTHON_BIN" -m venv "$VENV_DIR"; then
         if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
             apt-get update
-            apt-get install -y --no-install-recommends python3-venv
+            apt-get install -y --no-install-recommends python3-venv fontconfig fonts-wqy-zenhei
+            fc-cache -fv >/dev/null 2>&1 || true
             "$PYTHON_BIN" -m venv "$VENV_DIR"
         else
             echo "创建虚拟环境失败，请安装 python3-venv 后重试。"
@@ -34,6 +35,11 @@ PYTHON="$PROJECT_ROOT/$VENV_DIR/bin/python"
 STREAMLIT="$PROJECT_ROOT/$VENV_DIR/bin/streamlit"
 
 echo "========== 安装依赖 =========="
+if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+    apt-get update
+    apt-get install -y --no-install-recommends fontconfig fonts-wqy-zenhei
+    fc-cache -fv >/dev/null 2>&1 || true
+fi
 "$PYTHON" -m ensurepip --upgrade >/dev/null 2>&1 || true
 "$PYTHON" -m pip install --upgrade pip
 "$PYTHON" -m pip install -r requirements.txt
