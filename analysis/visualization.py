@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -9,16 +10,36 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import numpy as np
 
 from analysis import config
 
+_fonts_registered = False
+
+
+def _register_system_fonts() -> None:
+    """将系统字体目录中的字体注册到 matplotlib。"""
+    global _fonts_registered
+    if _fonts_registered:
+        return
+    for sys_dir in ("/usr/share/fonts", "/usr/local/share/fonts"):
+        if not os.path.isdir(sys_dir):
+            continue
+        for root, _dirs, files in os.walk(sys_dir):
+            for filename in files:
+                if filename.endswith((".ttf", ".ttc", ".otf")):
+                    fm.fontManager.addfont(os.path.join(root, filename))
+    _fonts_registered = True
+
 
 def configure_matplotlib() -> None:
     """配置全局绘图样式。"""
+    _register_system_fonts()
     plt.style.use(config.MATPLOTLIB_STYLE)
     plt.rcParams["font.family"] = config.FONT_FAMILY
+    plt.rcParams["font.weight"] = "medium"  
     plt.rcParams["axes.unicode_minus"] = False
     plt.rcParams["figure.dpi"] = config.FIGURE_DPI
     plt.rcParams["savefig.dpi"] = config.FIGURE_DPI
