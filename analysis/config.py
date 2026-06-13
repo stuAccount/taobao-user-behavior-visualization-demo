@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import platform
 from pathlib import Path
 
@@ -37,6 +38,10 @@ ASSOCIATION_SUMMARY_PATH = SUMMARY_DIR / "association_summary.json"
 # 数据
 COLUMNS = ["user_id", "item_id", "category_id", "behavior", "timestamp"]
 CHUNK_SIZE = 1_000_000
+CLEANING_ENGINE = os.getenv("CLEANING_ENGINE", "polars").lower()
+CLEANING_STATS_MODE = os.getenv("CLEANING_STATS_MODE", "fast").lower()
+POLARS_MAX_THREADS = os.getenv("POLARS_MAX_THREADS") or os.getenv("CLEANING_THREADS") or "auto"
+PARQUET_ROW_GROUP_SIZE = int(os.getenv("PARQUET_ROW_GROUP_SIZE", "1000000"))
 VALID_BEHAVIORS = ["pv", "fav", "cart", "buy"]
 DATE_RANGE = ("2017-11-25", "2017-12-03")
 TIMEZONE = "Asia/Shanghai"

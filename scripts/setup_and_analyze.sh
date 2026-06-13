@@ -8,6 +8,9 @@ cd "$PROJECT_ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
 RUN_APRIORI="${RUN_APRIORI:-0}"
+CLEANING_THREADS="${CLEANING_THREADS:-64}"
+export CLEANING_ENGINE="${CLEANING_ENGINE:-polars}"
+export POLARS_MAX_THREADS="${POLARS_MAX_THREADS:-$CLEANING_THREADS}"
 
 install_ubuntu_packages_if_possible() {
     if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
@@ -55,6 +58,7 @@ echo "========== [3/6] 检查并下载数据 =========="
 bash scripts/download_data.sh
 
 echo "========== [4/6] 数据清洗 =========="
+echo "清洗引擎：$CLEANING_ENGINE，Polars 线程数：$POLARS_MAX_THREADS"
 "$PYTHON" -m analysis.data_cleaning
 
 echo "========== [5/6] 运行分析模块 =========="
