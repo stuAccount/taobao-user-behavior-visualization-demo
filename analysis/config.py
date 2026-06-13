@@ -38,6 +38,7 @@ ASSOCIATION_SUMMARY_PATH = SUMMARY_DIR / "association_summary.json"
 # 数据
 COLUMNS = ["user_id", "item_id", "category_id", "behavior", "timestamp"]
 CHUNK_SIZE = 1_000_000
+PARQUET_BATCH_SIZE = int(os.getenv("PARQUET_BATCH_SIZE", "1000000"))
 CLEANING_ENGINE = os.getenv("CLEANING_ENGINE", "polars").lower()
 CLEANING_STATS_MODE = os.getenv("CLEANING_STATS_MODE", "fast").lower()
 POLARS_MAX_THREADS = os.getenv("POLARS_MAX_THREADS") or os.getenv("CLEANING_THREADS") or "auto"

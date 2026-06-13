@@ -92,6 +92,7 @@ def _build_polars_lazy_frame(raw_data_path: Path):
         raw_data_path,
         has_header=False,
         new_columns=config.COLUMNS,
+        row_index_name="__row_nr",
         schema_overrides=schema_overrides,
         infer_schema=False,
         low_memory=False,
@@ -99,16 +100,16 @@ def _build_polars_lazy_frame(raw_data_path: Path):
 
     datetime_expr = pl.from_epoch("timestamp", time_unit="s").dt.offset_by("8h")
     return (
-        raw_lf.filter(pl.col("behavior").is_in(config.VALID_BEHAVIORS))
+        raw_lf.unique(
+            subset=["user_id", "item_id", "timestamp"],
+            keep="first",
+            maintain_order=True,
+        )
+        .filter(pl.col("behavior").is_in(config.VALID_BEHAVIORS))
         .with_columns(datetime_expr.alias("datetime"))
         .filter(
             (pl.col("datetime") >= pl.lit(start_datetime))
             & (pl.col("datetime") < pl.lit(end_datetime))
-        )
-        .unique(
-            subset=["user_id", "item_id", "timestamp"],
-            keep="first",
-            maintain_order=False,
         )
         .with_columns(
             [

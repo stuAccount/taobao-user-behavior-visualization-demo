@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 from analysis import config
 
@@ -120,7 +121,23 @@ def iter_cleaned_data_chunks(columns: list[str] | None = None):
     """按清洗后分块文件迭代读取数据。"""
     cleaned_path = get_cleaned_data_path()
     if cleaned_path.is_file():
-        yield load_cleaned_data(columns=columns)
+        if cleaned_path.suffix == ".parquet":
+            parquet_file = pq.ParquetFile(cleaned_path)
+            for batch in parquet_file.iter_batches(
+                batch_size=config.PARQUET_BATCH_SIZE,
+                columns=columns,
+                use_threads=True,
+            ):
+                yield batch.to_pandas()
+        else:
+            parse_dates = ["datetime"] if columns is None or "datetime" in columns else None
+            for chunk in pd.read_csv(
+                cleaned_path,
+                usecols=columns,
+                parse_dates=parse_dates,
+                chunksize=config.CHUNK_SIZE,
+            ):
+                yield chunk
         return
 
     chunk_paths = sorted(
